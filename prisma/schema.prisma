@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -------------------------------------------------------------
+// USER & UNIFIED ACCOUNT (Satu akun untuk semua fitur)
+// -------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  USER
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  password          String
+  name              String
+  role              Role               @default(USER)
+  gameTokenBalance  Int                @default(0) // Token untuk game (Rp 5.000)
+  examCreditBalance Int                @default(0) // Kredit publikasi ujian (Rp 14.900)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  tokenTransactions TokenTransaction[]
+  paymentOrders     PaymentOrder[]
+  gameDecks         GameDeck[]
+  gameSessions      GameSession[]
+  teacherExams      TeacherExam[]
+
+  @@index([role])
+}
+
+// -------------------------------------------------------------
+// TOKEN & PAYMENT SYSTEM (Pemisahan Token Game & Kredit Ujian)
+// -------------------------------------------------------------
+
+enum ProductType {
+  GAME_TOKEN      // Rp 5.000 (untuk unlock kartu game tak terbatas)
+  EXAM_CREDIT     // Rp 14.900 (untuk publikasi paket ujian 7 hari)
+}
+
+enum TokenTransactionType {
+  PURCHASE
+  ADMIN_GRANT
+  CONSUME_GAME_LIMIT
+  CONSUME_EXAM
+  REFUND
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+model TokenTransaction {
+  id          String               @id @default(cuid())
+  userId      String
+  productType ProductType          @default(GAME_TOKEN)
+  amount      Int
+  type        TokenTransactionType
+  note        String?
+  createdAt   DateTime             @default(now())
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model PaymentOrder {
+  id            String        @id @default(cuid())
+  userId        String
+  productType   ProductType   @default(GAME_TOKEN)
+  quantity      Int           @default(1)
+  price         Int           @default(5000)
+  status        PaymentStatus @default(PENDING)
+  paymentMethod String        @default("MANUAL_TRANSFER")
+  proofImageUrl String?
+  adminNote     String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// -------------------------------------------------------------
+// 1 BANK SOAL UNTUK BANYAK GAME & SMART TV
+// -------------------------------------------------------------
+
+enum GameType {
+  FLIP_CARD        // Mode Kartu Bolak-Balik
+  MATH_BATTLE_2P   // Mode Adu Cepat 2 Siswa (Tarik Tambang Poin)
+  SPIN_WHEEL       // Mode Roda Putar Acak
+  TRIVIA_QUIZ      // Mode Kuis Pilihan Ganda
+}
+
+model GameDeck {
+  id              String        @id @default(cuid())
+  userId          String
+  gameType        GameType      @default(FLIP_CARD)
+  title           String
+  description     String?
+  subject         String?
+  grade           String?
+  isPublic        Boolean       @default(true)
+  isTokenUnlocked Boolean       @default(false) // Jika true, buka >10 soal
+  pinCode         String?       @db.VarChar(12)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards           GameCard[]
+  sessions        GameSession[]
+
+  @@index([userId])
+  @@index([gameType, isPublic])
+  @@index([pinCode])
+}
+
+model GameCard {
+  id              String    @id @default(cuid())
+  deckId          String
+  question        String
+  answer          String
+  hint            String?
+  imageUrl        String?   @db.VarChar(500)
+  durationSeconds Int       @default(30)
+  order           Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  deck            GameDeck  @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  @@index([deckId, order])
+}
+
+model GameSession {
+  id               String    @id @default(cuid())
+  deckId           String
+  hostUserId       String
+  roomCode         String    @unique @db.VarChar(12) // PIN TV 6 karakter (tampilan read-only di TV)
+  hostControlKey   String    @default(cuid())       // Token rahasia remote guru agar siswa tidak bisa usil
+  selectedMode     GameType  @default(FLIP_CARD)
+  currentCardIndex Int       @default(0)
+  status           String    @default("ACTIVE")
+
+  // State khusus Game Battle 2 Siswa (Tarik Tambang Poin)
+  player1Name      String?   @default("Tim Biru")
+  player2Name      String?   @default("Tim Merah")
+  player1Score     Int       @default(0)
+  player2Score     Int       @default(0)
+  ropePosition     Int       @default(0) // 0 = netral, negatif = ditarik P1, positif = ditarik P2
+  targetDifference Int       @default(3) // Selisih poin untuk menang (default: 3 tarikan)
+  winner           String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  deck             GameDeck  @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  host             User      @relation(fields: [hostUserId], references: [id], onDelete: Cascade)
+
+  @@index([roomCode])
+}
+
+// -------------------------------------------------------------
+// MODE UJIAN (Persis my-exam Teacher Exam Architecture)
+// -------------------------------------------------------------
+
+enum TeacherExamStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum TeacherParticipantStatus {
+  IN_PROGRESS
+  SUBMITTED
+  BLOCKED
+}
+
+enum TeacherExamEventType {
+  TAB_HIDDEN
+  WINDOW_BLUR
+  FULLSCREEN_EXIT
+  COPY_ATTEMPT
+  PASTE_ATTEMPT
+  RIGHT_CLICK
+  MANUAL_BLOCK
+}
+
+model TeacherExam {
+  id                    String                   @id @default(cuid())
+  teacherId             String
+  title                 String
+  description           String?
+  durationMinutes       Int
+  pin                   String                   @db.VarChar(20)
+  shareToken            String                   @unique
+  status                TeacherExamStatus        @default(DRAFT)
+  autoBlockOnViolation  Boolean                  @default(true)
+  maxViolations         Int                      @default(1)
+  randomizeQuestions    Boolean                  @default(false)
+  randomizeOptions      Boolean                  @default(false)
+  showScoreAfterSubmit  Boolean                  @default(true)
+  showReviewAfterSubmit Boolean                  @default(false)
+  publishedAt           DateTime?
+  accessExpiresAt       DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  teacher               User                     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  questions             TeacherExamQuestion[]
+  participants          TeacherExamParticipant[]
+  rosterEntries         TeacherExamRosterEntry[]
+
+  @@index([teacherId])
+  @@index([status])
+  @@index([teacherId, status])
+  @@index([pin])
+}
+
+model TeacherExamQuestion {
+  id          String                      @id @default(cuid())
+  examId      String
+  question    String
+  explanation String?
+  order       Int
+  imageUrl    String?                     @db.VarChar(500)
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  exam        TeacherExam                 @relation(fields: [examId], references: [id], onDelete: Cascade)
+  options     TeacherExamQuestionOption[]
+  answers     TeacherExamAnswer[]
+
+  @@unique([examId, order])
+  @@index([examId])
+}
+
+model TeacherExamQuestionOption {
+  id         String              @id @default(cuid())
+  questionId String
+  label      String              @db.VarChar(10)
+  text       String
+  isCorrect  Boolean             @default(false)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  question   TeacherExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers    TeacherExamAnswer[]
+
+  @@unique([questionId, label])
+  @@index([questionId])
+}
+
+model TeacherExamRosterEntry {
+  id                  String      @id @default(cuid())
+  examId              String
+  attendanceNumber    String      @db.VarChar(32)
+  studentName         String      @db.VarChar(160)
+  normalizedName      String      @db.VarChar(160)
+  className           String      @db.VarChar(80)
+  normalizedClassName String      @db.VarChar(80)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  exam                TeacherExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, attendanceNumber, normalizedClassName])
+  @@index([examId])
+}
+
+model TeacherExamParticipant {
+  id                   String                   @id @default(cuid())
+  examId               String
+  name                 String
+  attendanceNumber     String?
+  className            String
+  participantToken     String                   @unique
+  status               TeacherParticipantStatus @default(IN_PROGRESS)
+  score                Float?
+  correctAnswers       Int                      @default(0)
+  wrongAnswers         Int                      @default(0)
+  unansweredQuestions  Int                      @default(0)
+  answeredQuestions    Int                      @default(0)
+  currentQuestionIndex Int                      @default(0)
+  violationCount       Int                      @default(0)
+  lastActivityAt       DateTime                 @default(now())
+  startedAt            DateTime                 @default(now())
+  submittedAt          DateTime?
+  blockedAt            DateTime?
+  blockReason          String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  exam                 TeacherExam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  answers              TeacherExamAnswer[]
+  events               TeacherExamEvent[]
+
+  @@index([examId])
+  @@index([status])
+  @@index([examId, status])
+  @@index([lastActivityAt])
+}
+
+model TeacherExamAnswer {
+  id               String                     @id @default(cuid())
+  participantId    String
+  questionId       String
+  selectedOptionId String?
+  isCorrect        Boolean                    @default(false)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  participant      TeacherExamParticipant     @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  question         TeacherExamQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption   TeacherExamQuestionOption? @relation(fields: [selectedOptionId], references: [id])
+
+  @@unique([participantId, questionId])
+  @@index([questionId])
+  @@index([selectedOptionId])
+}
+
+model TeacherExamEvent {
+  id            String                 @id @default(cuid())
+  participantId String
+  type          TeacherExamEventType
+  detail        String?
+  isBlocking    Boolean                @default(false)
+  createdAt     DateTime               @default(now())
+
+  participant   TeacherExamParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@index([type])
+  @@index([participantId, createdAt])
+}
+
+// -------------------------------------------------------------
+// JASA BUAT WEB & LES MATEMATIKA (Leads & WhatsApp Redirection)
+// -------------------------------------------------------------
+
+enum ServiceType {
+  WEB_DEVELOPMENT
+  MATH_TUTORING
+}
+
+model ServiceInquiry {
+  id             String      @id @default(cuid())
+  serviceType    ServiceType
+  visitorName    String?
+  visitorPhone   String?
+  notes          String?
+  ipAddress      String?
+  userAgent      String?
+  redirectedToWa Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+
+  @@index([serviceType, createdAt])
+}

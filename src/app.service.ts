@@ -3,6 +3,6 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class AppService {
   getHello(): string {
-    return 'Hello World!';
+    return 'wellcome to satelyd backend api';
   }
 }
