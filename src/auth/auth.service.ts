@@ -56,17 +56,23 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase().trim() },
+    const identifier = dto.email.trim();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: identifier.toLowerCase() },
+          { name: { equals: identifier, mode: 'insensitive' } },
+        ],
+      },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Email atau kata sandi tidak cocok');
+      throw new UnauthorizedException('Email/nama atau kata sandi tidak cocok');
     }
 
     const isMatch = await bcrypt.compare(dto.password, user.password);
     if (!isMatch) {
-      throw new UnauthorizedException('Email atau kata sandi tidak cocok');
+      throw new UnauthorizedException('Email/nama atau kata sandi tidak cocok');
     }
 
     const token = this.generateToken(user.id, user.email, user.role);
