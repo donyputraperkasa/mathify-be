@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { FlipCardsModule } from './flip-cards/flip-cards.module';
+import { GameDecksModule } from './game-decks/game-decks.module';
 import { TvSessionsModule } from './tv-sessions/tv-sessions.module';
 
 @Module({
-  imports: [FlipCardsModule, TvSessionsModule],
-  exports: [FlipCardsModule, TvSessionsModule],
+  imports: [GameDecksModule, TvSessionsModule],
+  exports: [GameDecksModule, TvSessionsModule],
 })
 export class GamesModule {}

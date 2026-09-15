@@ -19,12 +19,12 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AddCardDto } from './dto/add-card.dto';
 import { CreateDeckDto } from './dto/create-deck.dto';
-import { FlipCardsService } from './flip-cards.service';
+import { GameDecksService } from './game-decks.service';
 
-@ApiTags('Games - Question Decks & Modes (Kartu Balik, Roda Putar, Trivia)')
-@Controller('games/flip-cards')
-export class FlipCardsController {
-  constructor(private readonly flipCardsService: FlipCardsService) {}
+@ApiTags('Game Decks (Bank Soal Multi-Game: Flip Card, Math Battle, Roda Putar, Trivia)')
+@Controller(['games/decks', 'games/flip-cards'])
+export class GameDecksController {
+  constructor(private readonly gameDecksService: GameDecksService) {}
 
   @Get()
   @ApiOperation({
@@ -44,7 +44,7 @@ export class FlipCardsController {
     @Query('search') search?: string,
     @Query('subject') subject?: string,
   ) {
-    return this.flipCardsService.getPublicDecks(search, subject);
+    return this.gameDecksService.getPublicDecks(search, subject);
   }
 
   @Get('my-decks')
@@ -54,7 +54,7 @@ export class FlipCardsController {
     summary: 'Get question decks created by current user (Milik Saya)',
   })
   async getMyDecks(@CurrentUser('sub') userId: string) {
-    return this.flipCardsService.getMyDecks(userId);
+    return this.gameDecksService.getMyDecks(userId);
   }
 
   @Get(':id')
@@ -63,7 +63,7 @@ export class FlipCardsController {
       'Get deck details and questions (Maksimal 10 kartu untuk mode gratis)',
   })
   async getDeckById(@Param('id') deckId: string) {
-    return this.flipCardsService.getDeckById(deckId);
+    return this.gameDecksService.getDeckById(deckId);
   }
 
   @Post()
@@ -78,7 +78,7 @@ export class FlipCardsController {
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateDeckDto,
   ) {
-    return this.flipCardsService.createDeck(userId, dto);
+    return this.gameDecksService.createDeck(userId, dto);
   }
 
   @Post(':id/cards')
@@ -93,7 +93,7 @@ export class FlipCardsController {
     @Param('id') deckId: string,
     @Body() dto: AddCardDto,
   ) {
-    return this.flipCardsService.addCard(userId, deckId, dto);
+    return this.gameDecksService.addCard(userId, deckId, dto);
   }
 
   @Post(':id/unlock')
@@ -107,7 +107,7 @@ export class FlipCardsController {
     @CurrentUser('sub') userId: string,
     @Param('id') deckId: string,
   ) {
-    return this.flipCardsService.unlockDeckWithToken(userId, deckId);
+    return this.gameDecksService.unlockDeckWithToken(userId, deckId);
   }
 
   @Delete(':id')
@@ -118,6 +118,6 @@ export class FlipCardsController {
     @CurrentUser('sub') userId: string,
     @Param('id') deckId: string,
   ) {
-    return this.flipCardsService.deleteDeck(userId, deckId);
+    return this.gameDecksService.deleteDeck(userId, deckId);
   }
 }

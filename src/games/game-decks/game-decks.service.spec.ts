@@ -9,10 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../../users/users.service';
-import { FlipCardsService } from './flip-cards.service';
+import { GameDecksService } from './game-decks.service';
 
-describe('FlipCardsService (Free Limit & Token Unlock)', () => {
-  let service: FlipCardsService;
+describe('GameDecksService (Free Limit & Token Unlock)', () => {
+  let service: GameDecksService;
   let prisma: {
     gameDeck: {
       findMany: jest.Mock;
@@ -54,14 +54,14 @@ describe('FlipCardsService (Free Limit & Token Unlock)', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        FlipCardsService,
+        GameDecksService,
         { provide: PrismaService, useValue: prisma },
         { provide: UsersService, useValue: usersService },
         { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
-    service = module.get<FlipCardsService>(FlipCardsService);
+    service = module.get<GameDecksService>(GameDecksService);
   });
 
   describe('Deck Creation & Limits', () => {

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -32,7 +33,10 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Pengguna tidak ditemukan');
     }
-    return user;
+    return {
+      ...user,
+      isUnlimited: user.role === Role.ADMIN,
+    };
   }
 
   async addGameTokens(userId: string, quantity: number, note?: string) {
@@ -61,7 +65,15 @@ export class UsersService {
   async deductGameTokens(userId: string, quantity: number, note?: string) {
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.user.findUnique({ where: { id: userId } });
-      if (!current || current.gameTokenBalance < quantity) {
+      if (!current) {
+        throw new NotFoundException('Pengguna tidak ditemukan');
+      }
+
+      if (current.role === Role.ADMIN) {
+        return current;
+      }
+
+      if (current.gameTokenBalance < quantity) {
         throw new Error('Saldo Token Game tidak mencukupi');
       }
 
@@ -112,7 +124,15 @@ export class UsersService {
   async deductExamCredits(userId: string, quantity: number, note?: string) {
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.user.findUnique({ where: { id: userId } });
-      if (!current || current.examCreditBalance < quantity) {
+      if (!current) {
+        throw new NotFoundException('Pengguna tidak ditemukan');
+      }
+
+      if (current.role === Role.ADMIN) {
+        return current;
+      }
+
+      if (current.examCreditBalance < quantity) {
         throw new Error('Saldo Kredit Ujian tidak mencukupi');
       }
 

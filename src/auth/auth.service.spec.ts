@@ -16,6 +16,7 @@ describe('AuthService (Unified Account Registration & Login)', () => {
   let prisma: {
     user: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       create: jest.Mock;
     };
   };
@@ -25,6 +26,7 @@ describe('AuthService (Unified Account Registration & Login)', () => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
       },
     };
@@ -83,7 +85,7 @@ describe('AuthService (Unified Account Registration & Login)', () => {
   describe('Login', () => {
     it('should login successfully with valid credentials', async () => {
       const hashedPassword = await bcrypt.hash('Password123!', 10);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'user-1',
         email: 'dony@satelyd.com',
         name: 'Dony Perkasa',
@@ -104,7 +106,7 @@ describe('AuthService (Unified Account Registration & Login)', () => {
 
     it('should throw UnauthorizedException if password does not match', async () => {
       const hashedPassword = await bcrypt.hash('CorrectPass!', 10);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'user-1',
         email: 'dony@satelyd.com',
         password: hashedPassword,

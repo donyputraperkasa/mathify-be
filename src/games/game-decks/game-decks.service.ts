@@ -5,13 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../../users/users.service';
 import { AddCardDto } from './dto/add-card.dto';
 import { CreateDeckDto } from './dto/create-deck.dto';
 
 @Injectable()
-export class FlipCardsService {
+export class GameDecksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
@@ -105,10 +106,12 @@ export class FlipCardsService {
   async createDeck(userId: string, dto: CreateDeckDto) {
     const cards = dto.cards ?? [];
 
-    // Jika membuat lebih dari kuota gratis saat create, periksa saldo token
-    let isTokenUnlocked = false;
-    if (cards.length > this.freeLimit) {
-      const user = await this.usersService.findById(userId);
+    const user = await this.usersService.findById(userId);
+    const isAdmin = user?.role === Role.ADMIN;
+
+    // Jika admin, deck otomatis unlocked tanpa syarat
+    let isTokenUnlocked = isAdmin;
+    if (!isAdmin && cards.length > this.freeLimit) {
       if (!user || user.gameTokenBalance < 1) {
         throw new BadRequestException(
           `Batas gratis adalah ${this.freeLimit} kartu. Anda memerlukan 1 Token Game (Rp ${this.gameTokenPrice.toLocaleString('id-ID')}) untuk membuat deck dengan lebih dari ${this.freeLimit} kartu. Saldo Token Game Anda saat ini: ${user?.gameTokenBalance ?? 0}`,
@@ -167,9 +170,12 @@ export class FlipCardsService {
 
     const currentCardCount = deck._count.cards;
     if (currentCardCount >= this.freeLimit && !deck.isTokenUnlocked) {
-      throw new BadRequestException(
-        `Deck telah mencapai batas kuota gratis (${this.freeLimit} kartu). Gunakan 1 Token Game (Rp ${this.gameTokenPrice.toLocaleString('id-ID')}) untuk membuka kuota tanpa batas.`,
-      );
+      const user = await this.usersService.findById(userId);
+      if (user?.role !== Role.ADMIN) {
+        throw new BadRequestException(
+          `Deck telah mencapai batas kuota gratis (${this.freeLimit} kartu). Gunakan 1 Token Game (Rp ${this.gameTokenPrice.toLocaleString('id-ID')}) untuk membuka kuota tanpa batas.`,
+        );
+      }
     }
 
     return this.prisma.gameCard.create({
