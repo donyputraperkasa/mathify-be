@@ -19,19 +19,20 @@ export class TokensService {
   getProductPrice(productType: ProductType): number {
     if (productType === 'GAME_TOKEN') {
       const price = this.configService.get<number>('GAME_TOKEN_PRICE');
-      return price ? Number(price) : 5000;
+      return price ? Number(price) : 2500;
     }
     if (productType === 'EXAM_CREDIT') {
       const price = this.configService.get<number>('EXAM_CREDIT_PRICE');
       return price ? Number(price) : 14900;
     }
-    return 5000;
+    return 2500;
   }
 
   async createOrder(userId: string, dto: CreatePaymentOrderDto) {
     const quantity = dto.quantity ?? 1;
     const unitPrice = this.getProductPrice(dto.productType);
-    const totalPrice = quantity * unitPrice;
+    const totalPrice =
+      dto.price !== undefined && dto.price >= 0 ? dto.price : quantity * unitPrice;
 
     const order = await this.prisma.paymentOrder.create({
       data: {
@@ -42,13 +43,18 @@ export class TokensService {
         status: 'PENDING',
         paymentMethod: dto.paymentMethod ?? 'MANUAL_TRANSFER',
         proofImageUrl: dto.proofImageUrl,
+        adminNote: dto.packageName ? `Paket: ${dto.packageName}` : undefined,
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
       },
     });
 
     const productName =
-      dto.productType === 'GAME_TOKEN'
+      dto.packageName ??
+      (dto.productType === 'GAME_TOKEN'
         ? 'Token Game (Buka Kuota Kartu)'
-        : 'Kredit Ujian (Publikasi Mode Ujian 7 Hari)';
+        : 'Kredit Ujian (Publikasi Mode Ujian 7 Hari)');
 
     return {
       message: `Pesanan pembelian ${quantity}x ${productName} berhasil dibuat.`,
@@ -179,4 +185,93 @@ export class TokensService {
       };
     });
   }
+
+  async getAllOrdersForAdmin() {
+    const orders = await this.prisma.paymentOrder.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            gameTokenBalance: true,
+            examCreditBalance: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders.map((ord) => {
+      const itemType = ord.productType === 'GAME_TOKEN' ? 'GAME' : 'EXAM';
+      const packageName =
+        ord.adminNote && ord.adminNote.startsWith('Paket: ')
+          ? ord.adminNote.replace('Paket: ', '')
+          : ord.productType === 'GAME_TOKEN'
+            ? `${ord.quantity} Sesi Game TV`
+            : `${ord.quantity} Kredit Ujian Online`;
+
+      return {
+        id: ord.id,
+        userName: ord.user?.name || 'Guru Satelyd',
+        userEmail: ord.user?.email || '',
+        schoolName: 'Sekolah Pengajar',
+        packageName,
+        itemType,
+        tokenAmount: ord.quantity,
+        price: ord.price,
+        paymentMethod: ord.paymentMethod || 'Manual Transfer',
+        senderAccount: 'Rekening Transfer',
+        referenceNumber: `REF-${ord.id.slice(-6).toUpperCase()}`,
+        proofImageUrl: ord.proofImageUrl || '',
+        createdAt: ord.createdAt.toISOString(),
+        status:
+          ord.status === 'PAID'
+            ? 'APPROVED'
+            : ord.status === 'REJECTED'
+              ? 'REJECTED'
+              : 'PENDING',
+        rawStatus: ord.status,
+        productType: ord.productType,
+        quantity: ord.quantity,
+        adminNote: ord.adminNote,
+        paidAt: ord.paidAt,
+        user: ord.user,
+      };
+    });
+  }
+
+  async rejectOrder(orderId: string, adminNote?: string) {
+    const order = await this.prisma.paymentOrder.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Pesanan tidak ditemukan');
+    }
+
+    if (order.status === 'PAID') {
+      throw new BadRequestException(
+        'Pesanan yang sudah dibayar tidak dapat ditolak',
+      );
+    }
+
+    const updated = await this.prisma.paymentOrder.update({
+      where: { id: orderId },
+      data: {
+        status: 'REJECTED',
+        adminNote: adminNote || 'Ditolak oleh Admin',
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return {
+      message: `Order #${orderId} telah ditolak.`,
+      order: updated,
+    };
+  }
 }
+

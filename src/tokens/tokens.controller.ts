@@ -87,6 +87,18 @@ export class TokensController {
     return this.tokensService.getMyTransactions(userId);
   }
 
+  @Get('admin/orders')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Admin: Get all purchase orders (Pantau Semua Pesanan Pembelian Guru & Screenshot Transfer)',
+  })
+  async getAllOrders() {
+    return this.tokensService.getAllOrdersForAdmin();
+  }
+
   @Patch('orders/:id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
@@ -100,5 +112,19 @@ export class TokensController {
     @Body('adminNote') adminNote?: string,
   ) {
     return this.tokensService.approveOrder(orderId, adminNote);
+  }
+
+  @Patch('orders/:id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Admin: Reject payment order (Tolak Pesanan Pembelian)',
+  })
+  async rejectOrder(
+    @Param('id') orderId: string,
+    @Body('adminNote') adminNote?: string,
+  ) {
+    return this.tokensService.rejectOrder(orderId, adminNote);
   }
 }

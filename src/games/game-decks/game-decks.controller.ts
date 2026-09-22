@@ -4,7 +4,9 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,12 +21,13 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AddCardDto } from './dto/add-card.dto';
 import { CreateDeckDto } from './dto/create-deck.dto';
+import { UpdateDeckDto } from './dto/update-deck.dto';
 import { GameDecksService } from './game-decks.service';
 
 @ApiTags('Game Decks (Bank Soal Multi-Game: Flip Card, Math Battle, Roda Putar, Trivia)')
-@Controller(['games/decks', 'games/flip-cards'])
+@Controller(['decks', 'games/decks', 'games/flip-cards'])
 export class GameDecksController {
-  constructor(private readonly gameDecksService: GameDecksService) {}
+  constructor(private readonly gameDecksService: GameDecksService) { }
 
   @Get()
   @ApiOperation({
@@ -108,6 +111,34 @@ export class GameDecksController {
     @Param('id') deckId: string,
   ) {
     return this.gameDecksService.unlockDeckWithToken(userId, deckId);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update deck and sync cards (Edit Info Deck & Daftar Kartu)',
+  })
+  async updateDeck(
+    @CurrentUser('sub') userId: string,
+    @Param('id') deckId: string,
+    @Body() dto: UpdateDeckDto,
+  ) {
+    return this.gameDecksService.updateDeck(userId, deckId, dto);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update deck and sync cards via PUT (Kompatibilitas Penuh)',
+  })
+  async putDeck(
+    @CurrentUser('sub') userId: string,
+    @Param('id') deckId: string,
+    @Body() dto: UpdateDeckDto,
+  ) {
+    return this.gameDecksService.updateDeck(userId, deckId, dto);
   }
 
   @Delete(':id')

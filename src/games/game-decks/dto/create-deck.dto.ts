@@ -14,20 +14,35 @@ import {
 } from 'class-validator';
 
 export class CardItemDto {
-  @ApiProperty({ example: 'Berapakah 25 x 4?' })
+  @ApiProperty({ example: 'Berapakah 25 x 4?', required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  question: string;
+  question?: string;
 
-  @ApiProperty({ example: '100' })
+  @ApiProperty({ example: 'Berapakah 25 x 4?', required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  answer: string;
+  frontQuestion?: string;
+
+  @ApiProperty({ example: '100', required: false })
+  @IsOptional()
+  @IsString()
+  answer?: string;
+
+  @ApiProperty({ example: '100', required: false })
+  @IsOptional()
+  @IsString()
+  backAnswer?: string;
 
   @ApiProperty({ example: 'Pikirkan kelipatan 25', required: false })
   @IsOptional()
   @IsString()
   hint?: string;
+
+  @ApiProperty({ example: 'Pikirkan kelipatan 25', required: false })
+  @IsOptional()
+  @IsString()
+  explanation?: string;
 
   @ApiProperty({ example: 'https://example.com/img.jpg', required: false })
   @IsOptional()
@@ -39,6 +54,26 @@ export class CardItemDto {
   @IsInt()
   @Min(5)
   durationSeconds?: number;
+
+  @ApiProperty({ example: 30, required: false })
+  @IsOptional()
+  @IsInt()
+  timerSeconds?: number;
+
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsInt()
+  order?: number;
+
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsInt()
+  orderIndex?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsArray()
+  options?: any[];
 }
 
 export class CreateDeckDto {
@@ -64,6 +99,21 @@ export class CreateDeckDto {
   @IsOptional()
   @IsString()
   grade?: string;
+
+  @ApiProperty({ example: 'Kelas 7', required: false })
+  @IsOptional()
+  @IsString()
+  gradeLevel?: string;
+
+  @ApiProperty({ example: 'SEDANG', required: false })
+  @IsOptional()
+  @IsString()
+  difficulty?: string;
+
+  @ApiProperty({ example: 'TV-8821', required: false })
+  @IsOptional()
+  @IsString()
+  pinCode?: string;
 
   @ApiProperty({ enum: GameType, default: GameType.FLIP_CARD, required: false })
   @IsOptional()

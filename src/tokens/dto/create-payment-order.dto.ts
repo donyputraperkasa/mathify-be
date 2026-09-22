@@ -34,4 +34,38 @@ export class CreatePaymentOrderDto {
   @IsOptional()
   @IsString()
   proofImageUrl?: string;
+
+  @ApiProperty({
+    example: 12000,
+    description: 'Total harga paket kustom/promo (opsional, jika tidak diset dihitung dari tarif satuan)',
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  price?: number;
+
+  @ApiProperty({
+    example: '5 Sesi Game (Reguler)',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  packageName?: string;
+
+  @ApiProperty({
+    example: 'BCA 1234567890 a.n. Guru',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  senderAccount?: string;
+
+  @ApiProperty({
+    example: 'REF-1727000',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  referenceNumber?: string;
 }

@@ -10,6 +10,31 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../../users/users.service';
 import { AddCardDto } from './dto/add-card.dto';
 import { CreateDeckDto } from './dto/create-deck.dto';
+import { UpdateDeckDto } from './dto/update-deck.dto';
+
+function formatCard(card: any) {
+  if (!card) return card;
+  return {
+    ...card,
+    frontQuestion: card.frontQuestion ?? card.question,
+    backAnswer: card.backAnswer ?? card.answer,
+    orderIndex: card.orderIndex ?? card.order,
+    timerSeconds: card.timerSeconds ?? card.durationSeconds,
+    explanation: card.explanation ?? card.hint ?? '',
+  };
+}
+
+function formatDeck(deck: any) {
+  if (!deck) return deck;
+  const cards = Array.isArray(deck.cards) ? deck.cards.map(formatCard) : [];
+  const cardCount = deck._count?.cards ?? cards.length;
+  return {
+    ...deck,
+    gradeLevel: deck.grade ?? deck.gradeLevel ?? '',
+    cardCount,
+    cards,
+  };
+}
 
 @Injectable()
 export class GameDecksService {
@@ -21,12 +46,12 @@ export class GameDecksService {
 
   private get freeLimit(): number {
     const limit = this.configService.get<number>('FREE_GAME_QUESTION_LIMIT');
-    return limit ? Number(limit) : 10;
+    return limit ? Number(limit) : 8;
   }
 
   private get gameTokenPrice(): number {
     const price = this.configService.get<number>('GAME_TOKEN_PRICE');
-    return price ? Number(price) : 5000;
+    return price ? Number(price) : 2500;
   }
 
   async getPublicDecks(search?: string, subject?: string) {
@@ -43,24 +68,28 @@ export class GameDecksService {
       where.subject = { equals: subject, mode: 'insensitive' };
     }
 
-    return this.prisma.gameDeck.findMany({
+    const decks = await this.prisma.gameDeck.findMany({
       where,
       include: {
         _count: { select: { cards: true } },
         user: { select: { id: true, name: true } },
+        cards: { orderBy: { order: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
+    return decks.map(formatDeck);
   }
 
   async getMyDecks(userId: string) {
-    return this.prisma.gameDeck.findMany({
+    const decks = await this.prisma.gameDeck.findMany({
       where: { userId },
       include: {
         _count: { select: { cards: true } },
+        cards: { orderBy: { order: 'asc' } },
       },
       orderBy: { updatedAt: 'desc' },
     });
+    return decks.map(formatDeck);
   }
 
   async getDeckById(deckId: string, currentUserId?: string) {
@@ -71,6 +100,7 @@ export class GameDecksService {
         cards: {
           orderBy: { order: 'asc' },
         },
+        _count: { select: { cards: true } },
       },
     });
 
@@ -91,9 +121,13 @@ export class GameDecksService {
       isLimited = true;
     }
 
-    return {
+    const formatted = formatDeck({
       ...deck,
       cards: accessibleCards,
+    });
+
+    return {
+      ...formatted,
       totalCards,
       freeLimit: this.freeLimit,
       isTokenUnlocked: deck.isTokenUnlocked,
@@ -125,31 +159,112 @@ export class GameDecksService {
       isTokenUnlocked = true;
     }
 
-    return this.prisma.gameDeck.create({
+    const created = await this.prisma.gameDeck.create({
       data: {
         userId,
         title: dto.title,
         description: dto.description,
         subject: dto.subject,
-        grade: dto.grade,
+        grade: dto.gradeLevel ?? dto.grade,
+        pinCode: dto.pinCode,
         gameType: dto.gameType ?? 'FLIP_CARD',
         isPublic: dto.isPublic ?? true,
         isTokenUnlocked,
         cards: {
           create: cards.map((c, index) => ({
-            question: c.question,
-            answer: c.answer,
-            hint: c.hint,
-            imageUrl: c.imageUrl,
-            durationSeconds: c.durationSeconds ?? 30,
-            order: index + 1,
+            question: c.frontQuestion ?? c.question ?? '',
+            answer: c.backAnswer ?? c.answer ?? '',
+            hint: c.explanation ?? c.hint ?? null,
+            imageUrl: c.imageUrl ?? null,
+            durationSeconds: c.timerSeconds ?? c.durationSeconds ?? 30,
+            order: c.orderIndex ?? c.order ?? index + 1,
           })),
         },
       },
       include: {
-        cards: true,
+        cards: { orderBy: { order: 'asc' } },
+        _count: { select: { cards: true } },
       },
     });
+
+    return formatDeck(created);
+  }
+
+  async updateDeck(userId: string, deckId: string, dto: UpdateDeckDto) {
+    const deck = await this.prisma.gameDeck.findUnique({
+      where: { id: deckId },
+      include: { cards: true },
+    });
+
+    if (!deck) {
+      throw new NotFoundException('Deck kartu tidak ditemukan');
+    }
+
+    const user = await this.usersService.findById(userId);
+    const isAdmin = user?.role === Role.ADMIN;
+    if (deck.userId !== userId && !isAdmin) {
+      throw new ForbiddenException(
+        'Hanya pembuat deck atau admin yang dapat mengubah deck ini',
+      );
+    }
+
+    const cards = dto.cards;
+    let isTokenUnlocked = deck.isTokenUnlocked;
+
+    if (cards && !isAdmin && cards.length > this.freeLimit && !isTokenUnlocked) {
+      if (!user || user.gameTokenBalance < 1) {
+        throw new BadRequestException(
+          `Batas gratis adalah ${this.freeLimit} kartu. Anda memerlukan 1 Token Game (Rp ${this.gameTokenPrice.toLocaleString('id-ID')}) untuk menambah kartu lebih dari ${this.freeLimit}. Saldo Token Game Anda saat ini: ${user?.gameTokenBalance ?? 0}`,
+        );
+      }
+      await this.usersService.deductGameTokens(
+        userId,
+        1,
+        `Buka kuota soal deck: ${dto.title ?? deck.title}`,
+      );
+      isTokenUnlocked = true;
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (cards && Array.isArray(cards)) {
+        await tx.gameCard.deleteMany({ where: { deckId } });
+        if (cards.length > 0) {
+          await tx.gameCard.createMany({
+            data: cards.map((c, idx) => ({
+              deckId,
+              question: c.frontQuestion ?? c.question ?? '',
+              answer: c.backAnswer ?? c.answer ?? '',
+              hint: c.explanation ?? c.hint ?? null,
+              imageUrl: c.imageUrl ?? null,
+              durationSeconds: c.timerSeconds ?? c.durationSeconds ?? 30,
+              order: c.orderIndex ?? c.order ?? idx + 1,
+            })),
+          });
+        }
+      }
+
+      return tx.gameDeck.update({
+        where: { id: deckId },
+        data: {
+          title: dto.title ?? undefined,
+          description:
+            dto.description !== undefined ? dto.description : undefined,
+          subject: dto.subject ?? undefined,
+          grade: (dto.gradeLevel ?? dto.grade) ?? undefined,
+          gameType: dto.gameType ?? undefined,
+          isPublic: dto.isPublic !== undefined ? dto.isPublic : undefined,
+          pinCode: dto.pinCode ?? undefined,
+          isTokenUnlocked,
+        },
+        include: {
+          cards: { orderBy: { order: 'asc' } },
+          user: { select: { id: true, name: true } },
+          _count: { select: { cards: true } },
+        },
+      });
+    });
+
+    return formatDeck(updated);
   }
 
   async addCard(userId: string, deckId: string, dto: AddCardDto) {
