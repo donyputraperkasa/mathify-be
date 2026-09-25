@@ -74,6 +74,31 @@ export class CardItemDto {
   @IsOptional()
   @IsArray()
   options?: any[];
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  deckId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  questionType?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  points?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  answerImageUrl?: string;
 }
 
 export class CreateDeckDto {

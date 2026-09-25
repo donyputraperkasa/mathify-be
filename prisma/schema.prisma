@@ -105,7 +105,6 @@ enum GameType {
   FLIP_CARD        // Mode Kartu Bolak-Balik
   MATH_BATTLE_2P   // Mode Adu Cepat 2 Siswa (Tarik Tambang Poin)
   SPIN_WHEEL       // Mode Roda Putar Acak
-  TRIVIA_QUIZ      // Mode Kuis Pilihan Ganda
 }
 
 model GameDeck {
@@ -351,25 +350,3 @@ model TeacherExamEvent {
   @@index([participantId, createdAt])
 }
 
-// -------------------------------------------------------------
-// JASA BUAT WEB & LES MATEMATIKA (Leads & WhatsApp Redirection)
-// -------------------------------------------------------------
-
-enum ServiceType {
-  WEB_DEVELOPMENT
-  MATH_TUTORING
-}
-
-model ServiceInquiry {
-  id             String      @id @default(cuid())
-  serviceType    ServiceType
-  visitorName    String?
-  visitorPhone   String?
-  notes          String?
-  ipAddress      String?
-  userAgent      String?
-  redirectedToWa Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-
-  @@index([serviceType, createdAt])
-}

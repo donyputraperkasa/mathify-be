@@ -14,13 +14,37 @@ import { UpdateDeckDto } from './dto/update-deck.dto';
 
 function formatCard(card: any) {
   if (!card) return card;
+  let options = card.options;
+  let questionType = card.questionType ?? "MULTIPLE_CHOICE";
+  let points = card.points ?? 10;
+  let answerImageUrl = card.answerImageUrl;
+  let explanation = card.hint ?? "";
+
+  if (card.hint && typeof card.hint === "string" && card.hint.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(card.hint);
+      if (parsed && typeof parsed === "object") {
+        if (parsed.options) options = parsed.options;
+        if (parsed.questionType) questionType = parsed.questionType;
+        if (parsed.points !== undefined) points = parsed.points;
+        if (parsed.answerImageUrl) answerImageUrl = parsed.answerImageUrl;
+        if (parsed.explanation !== undefined) explanation = parsed.explanation;
+        else if (parsed.hint !== undefined) explanation = parsed.hint;
+      }
+    } catch {}
+  }
+
   return {
     ...card,
     frontQuestion: card.frontQuestion ?? card.question,
     backAnswer: card.backAnswer ?? card.answer,
     orderIndex: card.orderIndex ?? card.order,
-    timerSeconds: card.timerSeconds ?? card.durationSeconds,
-    explanation: card.explanation ?? card.hint ?? '',
+    timerSeconds: card.timerSeconds ?? card.durationSeconds ?? 30,
+    explanation: card.explanation ?? explanation,
+    options,
+    questionType,
+    points,
+    answerImageUrl,
   };
 }
 
@@ -171,14 +195,26 @@ export class GameDecksService {
         isPublic: dto.isPublic ?? true,
         isTokenUnlocked,
         cards: {
-          create: cards.map((c, index) => ({
-            question: c.frontQuestion ?? c.question ?? '',
-            answer: c.backAnswer ?? c.answer ?? '',
-            hint: c.explanation ?? c.hint ?? null,
-            imageUrl: c.imageUrl ?? null,
-            durationSeconds: c.timerSeconds ?? c.durationSeconds ?? 30,
-            order: c.orderIndex ?? c.order ?? index + 1,
-          })),
+          create: cards.map((c, index) => {
+            const meta: Record<string, any> = {};
+            if (c.options && Array.isArray(c.options)) meta.options = c.options;
+            if (c.questionType) meta.questionType = c.questionType;
+            if (c.points !== undefined) meta.points = c.points;
+            if (c.answerImageUrl) meta.answerImageUrl = c.answerImageUrl;
+            const hasMeta = Object.keys(meta).length > 0;
+            const hintStr = hasMeta
+              ? JSON.stringify({ explanation: c.explanation ?? c.hint ?? "", ...meta })
+              : (c.explanation ?? c.hint ?? null);
+
+            return {
+              question: c.frontQuestion ?? c.question ?? "",
+              answer: c.backAnswer ?? c.answer ?? "",
+              hint: hintStr,
+              imageUrl: c.imageUrl ?? null,
+              durationSeconds: c.timerSeconds ?? c.durationSeconds ?? 30,
+              order: c.orderIndex ?? c.order ?? index + 1,
+            };
+          }),
         },
       },
       include: {
@@ -230,15 +266,27 @@ export class GameDecksService {
         await tx.gameCard.deleteMany({ where: { deckId } });
         if (cards.length > 0) {
           await tx.gameCard.createMany({
-            data: cards.map((c, idx) => ({
-              deckId,
-              question: c.frontQuestion ?? c.question ?? '',
-              answer: c.backAnswer ?? c.answer ?? '',
-              hint: c.explanation ?? c.hint ?? null,
-              imageUrl: c.imageUrl ?? null,
-              durationSeconds: c.timerSeconds ?? c.durationSeconds ?? 30,
-              order: c.orderIndex ?? c.order ?? idx + 1,
-            })),
+            data: cards.map((c, idx) => {
+              const meta: Record<string, any> = {};
+              if (c.options && Array.isArray(c.options)) meta.options = c.options;
+              if (c.questionType) meta.questionType = c.questionType;
+              if (c.points !== undefined) meta.points = c.points;
+              if (c.answerImageUrl) meta.answerImageUrl = c.answerImageUrl;
+              const hasMeta = Object.keys(meta).length > 0;
+              const hintStr = hasMeta
+                ? JSON.stringify({ explanation: c.explanation ?? c.hint ?? "", ...meta })
+                : (c.explanation ?? c.hint ?? null);
+
+              return {
+                deckId,
+                question: c.frontQuestion ?? c.question ?? "",
+                answer: c.backAnswer ?? c.answer ?? "",
+                hint: hintStr,
+                imageUrl: c.imageUrl ?? null,
+                durationSeconds: c.timerSeconds ?? c.durationSeconds ?? 30,
+                order: c.orderIndex ?? c.order ?? idx + 1,
+              };
+            }),
           });
         }
       }

@@ -5,7 +5,6 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { GamesModule } from './games/games.module';
 import { PrismaModule } from './prisma/prisma.module';
-import { ServicesInfoModule } from './services-info/services-info.module';
 import { TeacherExamsModule } from './teacher-exams/teacher-exams.module';
 import { TokensModule } from './tokens/tokens.module';
 import { UsersModule } from './users/users.module';
@@ -21,7 +20,6 @@ import { UsersModule } from './users/users.module';
     GamesModule,
     TeacherExamsModule,
     TokensModule,
-    ServicesInfoModule,
   ],
   controllers: [AppController],
   providers: [AppService],
